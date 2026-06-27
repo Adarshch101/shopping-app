@@ -12,7 +12,7 @@ export default function AuthPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [step, setStep] = useState<'email' | 'password'>('email');
+  const [step, setStep] = useState<'email' | 'password' | 'forgot-password'>('email');
   const [userExists, setUserExists] = useState(false);
   
   const [loading, setLoading] = useState(false);
@@ -104,8 +104,6 @@ export default function AuthPage() {
           });
 
           if (regRes.ok) {
-            // Log the user in directly (Supabase auto logs in on signup usually)
-            // But just in case, trigger sign in or redirect
             setSuccessMsg('Account created successfully! Redirecting...');
             setTimeout(() => {
               router.push('/');
@@ -126,6 +124,32 @@ export default function AuthPage() {
     }
   };
 
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+
+    setLoading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
+      });
+
+      if (error) {
+        setErrorMsg(error.message);
+      } else {
+        setSuccessMsg('Reset link sent! Please check your email inbox.');
+      }
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Failed to send reset email.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex items-center justify-center min-h-[70vh] px-4 py-12">
       <div className="w-full max-w-md bg-white dark:bg-zinc-950 p-8 rounded-2xl border border-zinc-100 dark:border-zinc-900 shadow-xl transition-all">
@@ -135,11 +159,19 @@ export default function AuthPage() {
             <Sparkles className="h-5 w-5" />
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            {step === 'email' ? 'Welcome to ShopNow' : userExists ? 'Welcome Back!' : 'Create Your Account'}
+            {step === 'email'
+              ? 'Welcome to ShopNow'
+              : step === 'forgot-password'
+              ? 'Reset Your Password'
+              : userExists
+              ? 'Welcome Back!'
+              : 'Create Your Account'}
           </h2>
           <p className="text-sm text-zinc-400 max-w-xs">
             {step === 'email'
               ? 'Enter your email to sign in or create an account.'
+              : step === 'forgot-password'
+              ? 'Enter your email to receive a secure password reset link.'
               : userExists
               ? 'Enter your password to sign in to your account.'
               : 'Set up a password to register a new account.'}
@@ -210,6 +242,7 @@ export default function AuthPage() {
                   setPassword('');
                   setConfirmPassword('');
                   setErrorMsg('');
+                  setSuccessMsg('');
                 }}
                 className="text-neutral-500 hover:text-black dark:hover:text-white font-semibold flex items-center gap-1 cursor-pointer"
               >
@@ -219,9 +252,24 @@ export default function AuthPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="password" className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">
-                Password
-              </label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="password" className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">
+                  Password
+                </label>
+                {userExists && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStep('forgot-password');
+                      setErrorMsg('');
+                      setSuccessMsg('');
+                    }}
+                    className="text-xs text-neutral-500 hover:text-black dark:hover:text-white font-semibold cursor-pointer"
+                  >
+                    Forgot Password?
+                  </button>
+                )}
+              </div>
               <div className="relative">
                 <Lock className="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                 <Input
@@ -272,6 +320,59 @@ export default function AuthPage() {
                 'Create Account & Login'
               )}
             </Button>
+          </form>
+        )}
+
+        {/* Step 3: Forgot Password Form */}
+        {step === 'forgot-password' && (
+          <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="reset-email" className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">
+                Email Address
+              </label>
+              <div className="relative">
+                <Mail className="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                <Input
+                  id="reset-email"
+                  type="email"
+                  required
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading}
+                  className="pl-10 h-11 rounded-xl"
+                />
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-xl py-5 font-semibold flex items-center justify-center gap-2 cursor-pointer mt-6"
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  Send Reset Link
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </Button>
+
+            <div className="text-center mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setStep('password');
+                  setErrorMsg('');
+                  setSuccessMsg('');
+                }}
+                className="text-xs text-neutral-500 hover:text-black dark:hover:text-white font-semibold cursor-pointer"
+              >
+                Back to Sign In
+              </button>
+            </div>
           </form>
         )}
       </div>
