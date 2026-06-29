@@ -259,3 +259,28 @@ insert into public.products (id, name, description, price, category, image, rati
   '{"Capacity": "750 ml (24 oz)", "Insulation duration": "24 hrs cold / 12 hrs hot", "Weight": "380g", "Height": "10.4 inches"}'::jsonb,
   50
 );
+
+-- ==========================================
+-- 6. Create Chat Messages Table for Chatbot History
+-- ==========================================
+create table if not exists public.chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users on delete cascade,
+  session_id text not null,
+  sender text not null check (sender in ('user', 'bot')),
+  message text not null,
+  metadata jsonb,
+  created_at timestamptz default now()
+);
+
+-- Enable RLS for Chat Messages
+alter table public.chat_messages enable row level security;
+
+-- Policy: Allow all operations to chat messages for anyone
+create policy "Allow all access to chat messages for anyone" on public.chat_messages
+  for all using (true) with check (true);
+
+-- Indexing for lookup performance
+create index if not exists idx_chat_messages_user_id on public.chat_messages(user_id);
+create index if not exists idx_chat_messages_session_id on public.chat_messages(session_id);
+

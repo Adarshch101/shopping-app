@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppContextProvider } from "@/components/providers/app-context";
 import Header from "@/components/header";
+import ChatWidget from "@/components/chat-widget";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -39,6 +40,7 @@ export default function RootLayout({
               <p className="mt-1">Built with Next.js, Tailwind CSS, Supabase, and local database API routing.</p>
             </div>
           </footer>
+          <ChatWidget />
         </AppContextProvider>
       </body>
     </html>
