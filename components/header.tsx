@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShoppingBag, Heart, User, LogOut, Menu, X, Sparkles, AlertCircle } from 'lucide-react';
+import { ShoppingBag, Heart, LogOut, Menu, X, Sparkles, AlertCircle } from 'lucide-react';
 import { useApp } from './providers/app-context';
 import { Button } from './ui/button';
 

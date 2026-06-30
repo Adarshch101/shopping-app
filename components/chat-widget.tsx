@@ -11,7 +11,7 @@ import {
   Star, 
   ShoppingCart, 
   Check, 
-  Trash2
+  Plus
 } from 'lucide-react';
 import { useApp } from './providers/app-context';
 import { Product } from '@/lib/products-data';
@@ -25,7 +25,7 @@ interface Message {
 }
 
 export default function ChatWidget() {
-  const { user, addToCart } = useApp();
+  const { user, addToCart, refreshCart, applyCoupon, userPreferences, updateUserPreferences } = useApp();
   const [isOpen, setIsOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
   const [inputMessage, setInputMessage] = useState('');
@@ -48,7 +48,7 @@ export default function ChatWidget() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize unique sessionId and restore history from database
+  // Initialize unique sessionId and restore history from sessionStorage
   useEffect(() => {
     let id = typeof window !== 'undefined' ? sessionStorage.getItem('shopnow_chat_session') : null;
     if (!id) {
@@ -57,33 +57,38 @@ export default function ChatWidget() {
         sessionStorage.setItem('shopnow_chat_session', id);
       }
     }
-      setSessionId(id);
+    setSessionId(id);
 
-    async function loadHistory() {
+    // Restore history from sessionStorage
+    const storedHistory = typeof window !== 'undefined' ? sessionStorage.getItem('shopnow_chat_history') : null;
+    if (storedHistory) {
       try {
-        const res = await fetch(`/api/chat/history?sessionId=${id}`);
-        if (res.ok) {
-          const history = await res.json();
-          if (history && history.length > 0) {
-            const mapped = history.map((m: any) => ({
-              ...m,
-              timestamp: new Date(m.timestamp)
-            }));
-            setMessages(mapped);
-            
-            // Derive suggestions based on the last message
-            const lastMsg = history[history.length - 1];
-            if (lastMsg.sender === 'user') {
-              setSuggestions([]);
-            }
+        const history = JSON.parse(storedHistory);
+        if (history && history.length > 0) {
+          const mapped = history.map((m: any) => ({
+            ...m,
+            timestamp: new Date(m.timestamp)
+          }));
+          setMessages(mapped);
+          
+          // Derive suggestions based on the last message
+          const lastMsg = history[history.length - 1];
+          if (lastMsg.sender === 'user') {
+            setSuggestions([]);
           }
         }
       } catch (err) {
-        console.error("Failed to load chat history", err);
+        console.error("Failed to parse chat history from sessionStorage", err);
       }
     }
-    loadHistory();
   }, [user]);
+
+  // Save messages to sessionStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('shopnow_chat_history', JSON.stringify(messages));
+    }
+  }, [messages]);
 
   // Auto-scroll to bottom of chat window
   useEffect(() => {
@@ -103,8 +108,7 @@ export default function ChatWidget() {
   const handleSendMessage = async (textToSend: string) => {
     if (!textToSend.trim() || !sessionId) return;
 
-    // Add user message locally for instant response feel
-    const userMsgId = Math.random().toString(36).substr(2, 9);
+    const userMsgId = Math.random().toString(36).substring(2, 11);
     const userMsg: Message = {
       id: userMsgId,
       sender: 'user',
@@ -116,6 +120,9 @@ export default function ChatWidget() {
     setInputMessage('');
     setIsTyping(true);
     setSuggestions([]);
+
+    const botMsgId = Math.random().toString(36).substring(2, 11);
+    let botMsgCreated = false;
 
     try {
       const headers: Record<string, string> = {
@@ -130,7 +137,12 @@ export default function ChatWidget() {
         headers,
         body: JSON.stringify({ 
           message: textToSend,
-          sessionId: sessionId
+          sessionId: sessionId,
+          preferences: userPreferences,
+          history: messages.map(m => ({
+            sender: m.sender,
+            text: m.text
+          }))
         }),
       });
 
@@ -138,65 +150,128 @@ export default function ChatWidget() {
         throw new Error('Failed to connect to assistant');
       }
 
-      const data = await response.json();
-      
-      // Delay slightly for natural conversational pacing
-      setTimeout(() => {
-        const botMsg: Message = {
-          id: Math.random().toString(36).substr(2, 9),
-          sender: 'bot',
-          text: data.reply || "I'm sorry, I encountered an issue. How else can I help?",
-          products: data.products || [],
-          timestamp: new Date()
-        };
-        
-        setMessages(prev => [...prev, botMsg]);
-        setSuggestions(data.suggestions || []);
-        setIsTyping(false);
-      }, 500);
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Stream reader not available');
+      }
+
+      setIsTyping(false);
+
+      const decoder = new TextDecoder();
+      let done = false;
+      let accumulatedText = '';
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: !done });
+          accumulatedText += chunk;
+
+          const delimiterIndex = accumulatedText.indexOf('---METADATA---');
+          let visibleText = accumulatedText;
+          if (delimiterIndex !== -1) {
+            visibleText = accumulatedText.substring(0, delimiterIndex);
+          } else {
+            const partialIndex = accumulatedText.lastIndexOf('\n---');
+            if (partialIndex !== -1 && partialIndex > accumulatedText.length - 30) {
+              visibleText = accumulatedText.substring(0, partialIndex);
+            }
+          }
+          visibleText = visibleText.trim();
+          
+          // Strip any model-generated literal "Metadata: ..." text blocks
+          visibleText = visibleText
+            .replace(/metadata:\s*\{[\s\S]*\}?/gi, '')
+            .replace(/metadata:\s*\[[\s\S]*\]?/gi, '')
+            .replace(/metadata:\s*.*$/gi, '')
+            .trim();
+
+          if (!botMsgCreated) {
+            botMsgCreated = true;
+            const newBotMsg: Message = {
+              id: botMsgId,
+              sender: 'bot',
+              text: visibleText,
+              timestamp: new Date(),
+              products: []
+            };
+            setMessages(prev => [...prev, newBotMsg]);
+          } else {
+            setMessages(prev => prev.map(m => m.id === botMsgId ? { ...m, text: visibleText } : m));
+          }
+
+          if (delimiterIndex !== -1) {
+            const metadataStr = accumulatedText.substring(delimiterIndex + '---METADATA---'.length).trim();
+            if (metadataStr) {
+              try {
+                const metadata = JSON.parse(metadataStr);
+                setMessages(prev => prev.map(m => m.id === botMsgId ? { 
+                  ...m, 
+                  products: (metadata.products || []).slice(0, 5),
+                  text: visibleText
+                } : m));
+                setSuggestions(metadata.suggestions || []);
+
+                if (metadata.action === 'refresh_cart') {
+                  refreshCart();
+                } else if (metadata.action === 'apply_coupon' && metadata.couponCode) {
+                  applyCoupon(metadata.couponCode);
+                }
+
+                if (metadata.preferences) {
+                  updateUserPreferences(metadata.preferences);
+                }
+              } catch {
+                // Ignore parser errors until full chunk arrives
+              }
+            }
+          }
+        }
+      }
 
     } catch (error) {
       console.error('Chat widget error:', error);
-      setTimeout(() => {
-        setMessages(prev => [
-          ...prev,
-          {
-            id: Math.random().toString(36).substr(2, 9),
-            sender: 'bot',
-            text: "I'm having trouble connecting right now. Please ensure your internet connection is active, or check back shortly!",
-            timestamp: new Date()
-          }
-        ]);
-        setSuggestions(['Show footwear', 'Return policy']);
-        setIsTyping(false);
-      }, 500);
+      setIsTyping(false);
+      
+      const errorMsg: Message = {
+        id: Math.random().toString(36).substring(2, 11),
+        sender: 'bot',
+        text: "I'm having trouble connecting right now. Please ensure your internet connection is active, or check back shortly!",
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMsg]);
+      setSuggestions(['Show footwear', 'Return policy']);
     }
   };
 
-  const handleClearChat = async () => {
-    if (!sessionId) return;
-    try {
-      const res = await fetch(`/api/chat/history?sessionId=${sessionId}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        setMessages([
-          {
-            id: 'welcome',
-            sender: 'bot',
-            text: 'Hello! I am **ShopNow Assist**, your personal AI shopping helper. Ask me anything about our products, store policies, or try: \n\n- "Show me footwear"\n- "What is your return policy?"\n- "Do you have mechanical keyboards?"',
-            timestamp: new Date()
-          }
-        ]);
-        setSuggestions([
-          'Show me footwear',
-          'Return policy',
-          'Are there shipping charges?'
-        ]);
-      }
-    } catch (err) {
-      console.error("Failed to clear chat history", err);
+  const handleClearChat = () => {
+    if (typeof window !== 'undefined') {
+      const confirmNew = window.confirm("Are you sure you want to start a new chat? Your current conversation history will be lost.");
+      if (!confirmNew) return;
     }
+
+    // Clear messages from sessionStorage
+    sessionStorage.removeItem('shopnow_chat_history');
+
+    // Generate a fresh session ID
+    const newId = 'sess-' + Math.random().toString(36).substring(2, 15) + '-' + Date.now().toString(36);
+    sessionStorage.setItem('shopnow_chat_session', newId);
+    setSessionId(newId);
+
+    setMessages([
+      {
+        id: 'welcome',
+        sender: 'bot',
+        text: 'Hello! I am **ShopNow Assist**, your personal AI shopping helper. Ask me anything about our products, store policies, or try: \n\n- "Show me footwear"\n- "What is your return policy?"\n- "Do you have mechanical keyboards?"',
+        timestamp: new Date()
+      }
+    ]);
+    setSuggestions([
+      'Show me footwear',
+      'Return policy',
+      'Are there shipping charges?'
+    ]);
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -306,10 +381,10 @@ export default function ChatWidget() {
             <div className="flex items-center gap-1.5">
               <button
                 onClick={handleClearChat}
-                className="rounded-full p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 hover:text-red-500 dark:hover:bg-zinc-900 dark:hover:text-zinc-200 dark:hover:text-red-400 transition-colors cursor-pointer"
-                title="Clear Chat History"
+                className="rounded-full p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                title="Start New Chat"
               >
-                <Trash2 className="h-4 w-4" />
+                <Plus className="h-4 w-4" />
               </button>
               <button
                 onClick={() => setIsOpen(false)}
@@ -329,7 +404,7 @@ export default function ChatWidget() {
                 <div 
                   className={`flex max-w-[85%] flex-col rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
                     msg.sender === 'user'
-                      ? 'ml-auto rounded-tr-none bg-zinc-900 text-white dark:bg-zinc-100 dark:text-black font-medium'
+                      ? 'ml-auto rounded-tr-none bg-zinc-200 text-white dark:bg-zinc-400 dark:text-black font-medium'
                       : 'mr-auto rounded-tl-none border border-zinc-100 bg-white text-zinc-800 dark:border-zinc-800/60 dark:bg-zinc-900 dark:text-zinc-200'
                   }`}
                 >
@@ -347,6 +422,7 @@ export default function ChatWidget() {
                         >
                           <Link href={`/product/${product.id}`} className="group flex-grow">
                             <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800 mb-2">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img 
                                 src={product.image} 
                                 alt={product.name} 

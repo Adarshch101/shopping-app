@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ShopNow | Premium E-Commerce Store",
+  title: "SN | Premium E-Commerce Store",
   description: "Browse high-quality electronics, accessories, lifestyle, and footwear items with ease.",
 };
 

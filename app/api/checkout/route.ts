@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
 import { mapProduct } from '@/lib/products-mapper';
-import { CartItem, Order } from '@/lib/products-data';
+import { CartItem } from '@/lib/products-data';
 
 // Helper to retrieve mapped cart items
 async function getCartItems(userId: string): Promise<CartItem[]> {
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { shippingAddress } = await request.json();
+    const { shippingAddress, couponCode } = await request.json();
     if (!shippingAddress || !shippingAddress.fullName || !shippingAddress.addressLine1 || !shippingAddress.city || !shippingAddress.postalCode || !shippingAddress.phone) {
       return Response.json({ error: 'Invalid or incomplete shipping address' }, { status: 400 });
     }
@@ -56,7 +56,51 @@ export async function POST(request: NextRequest) {
     }));
 
     // 3. Compute total amount
-    const totalAmount = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const subtotal = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    // 3b. Verify Coupon
+    let discount = 0;
+    if (couponCode) {
+      const FALLBACK_COUPONS = [
+        { code: 'SAVE10', discount_percent: 10.00, discount_amount: 0.00, min_order_amount: 0.00 },
+        { code: 'WELCOME50', discount_percent: 0.00, discount_amount: 50.00, min_order_amount: 300.00 },
+        { code: 'FREESHIP', discount_percent: 0.00, discount_amount: 99.00, min_order_amount: 500.00 }
+      ];
+
+      let coupon = null;
+      try {
+        const { data, error } = await supabase
+          .from('coupons')
+          .select('*')
+          .eq('code', couponCode.toUpperCase().trim())
+          .eq('active', true)
+          .maybeSingle();
+        if (!error && data) {
+          coupon = data;
+        }
+      } catch (dbErr) {
+        console.warn("DB Coupons query failed, falling back to local verification", dbErr);
+      }
+
+      if (!coupon) {
+        coupon = FALLBACK_COUPONS.find(c => c.code === couponCode.toUpperCase().trim());
+      }
+
+      if (coupon) {
+        if (subtotal >= Number(coupon.min_order_amount)) {
+          if (Number(coupon.discount_percent) > 0) {
+            discount = Number(((subtotal * Number(coupon.discount_percent)) / 100).toFixed(2));
+          } else if (Number(coupon.discount_amount) > 0) {
+            discount = Math.min(Number(coupon.discount_amount), subtotal);
+          }
+        }
+      }
+    }
+
+    const subtotalWithDiscount = Math.max(0, subtotal - discount);
+    const tax = Number((subtotalWithDiscount * 0.01).toFixed(2));
+    const totalAmount = Number((subtotalWithDiscount + tax).toFixed(2));
+
     const orderId = "ORD-" + Math.floor(100000 + Math.random() * 900000).toString();
 
     // 4. Insert order in Supabase
@@ -66,7 +110,7 @@ export async function POST(request: NextRequest) {
         id: orderId,
         user_id: userId,
         items: orderItems,
-        total_amount: Number(totalAmount.toFixed(2)),
+        total_amount: totalAmount,
         shipping_address: shippingAddress,
         status: "Processing"
       })

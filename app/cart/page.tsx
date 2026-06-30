@@ -3,14 +3,12 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import { ShoppingBag, Trash2, ArrowRight, ShieldCheck, HelpCircle, Lock } from 'lucide-react';
 import { useApp } from '@/components/providers/app-context';
 import { Button } from '@/components/ui/button';
 
 export default function CartPage() {
   const { user, cart, updateCartQuantity, removeFromCart, isLoading } = useApp();
-  const router = useRouter();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   if (isLoading) {

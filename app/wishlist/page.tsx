@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Heart, Trash2, ShoppingBag, Star, HelpCircle } from 'lucide-react';
+import { Heart, Trash2, ShoppingBag, Star } from 'lucide-react';
 import { useApp } from '@/components/providers/app-context';
 import { Button } from '@/components/ui/button';
 

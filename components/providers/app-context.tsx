@@ -26,6 +26,11 @@ interface AppContextType {
   refreshCart: () => Promise<void>;
   refreshWishlist: () => Promise<void>;
   logout: () => Promise<void>;
+  activeCoupon: any | null;
+  applyCoupon: (code: string) => Promise<{ success: boolean; message: string }>;
+  removeCoupon: () => void;
+  userPreferences: any;
+  updateUserPreferences: (prefs: any) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -37,6 +42,8 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   const [wishlist, setWishlist] = useState<Product[]>([]);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [productsList, setProductsList] = useState<Product[]>([]);
+  const [activeCoupon, setActiveCoupon] = useState<any | null>(null);
+  const [userPreferences, setUserPreferences] = useState<any>({});
 
   // Load products list locally to resolve anonymous wishlist product IDs
   useEffect(() => {
@@ -65,6 +72,66 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
       }
     }
   }, [user, productsList]);
+
+  // Load Coupon & Preferences on mount and user change
+  useEffect(() => {
+    const savedCoupon = sessionStorage.getItem('shopnow_active_coupon');
+    if (savedCoupon) {
+      try {
+        setActiveCoupon(JSON.parse(savedCoupon));
+      } catch {}
+    }
+
+    async function loadPreferences() {
+      if (user) {
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('preferences')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (profile?.preferences) {
+            setUserPreferences(profile.preferences);
+          } else {
+            const guestPrefs = sessionStorage.getItem('shopnow_user_preferences');
+            if (guestPrefs) {
+              try {
+                const parsed = JSON.parse(guestPrefs);
+                setUserPreferences(parsed);
+                await supabase
+                  .from('profiles')
+                  .update({ preferences: parsed })
+                  .eq('id', user.id);
+                sessionStorage.removeItem('shopnow_user_preferences');
+              } catch {}
+            }
+          }
+        } catch (e) {
+          console.error("Error loading user preferences from DB", e);
+        }
+      } else {
+        const guestPrefs = sessionStorage.getItem('shopnow_user_preferences');
+        if (guestPrefs) {
+          try {
+            setUserPreferences(JSON.parse(guestPrefs));
+          } catch {}
+        }
+      }
+    }
+    loadPreferences();
+  }, [user]);
+
+  // Automatically validate coupon when cart or subtotal changes
+  useEffect(() => {
+    if (activeCoupon) {
+      const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+      if (subtotal < Number(activeCoupon.min_order_amount)) {
+        setActiveCoupon(null);
+        sessionStorage.removeItem('shopnow_active_coupon');
+      }
+    }
+  }, [cart, activeCoupon]);
 
   // Auth Listener
   useEffect(() => {
@@ -112,7 +179,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
           try {
             const ids = JSON.parse(local);
             setWishlist(productsList.filter(p => ids.includes(p.id)));
-          } catch (e) {
+          } catch {
             setWishlist([]);
           }
         } else {
@@ -264,7 +331,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
       if (local) {
         try {
           ids = JSON.parse(local);
-        } catch (e) {}
+        } catch {}
       }
       if (!ids.includes(product.id)) {
         ids.push(product.id);
@@ -302,7 +369,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
           ids = ids.filter(id => id !== productId);
           localStorage.setItem('shopnow_wishlist', JSON.stringify(ids));
           setWishlist(prev => prev.filter(p => p.id !== productId));
-        } catch (e) {}
+        } catch {}
       }
     } else {
       // User: Remove from DB
@@ -318,6 +385,59 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
       } catch (e) {
         console.error(e);
       }
+    }
+  };
+
+  const applyCoupon = async (code: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const { data: coupon, error } = await supabase
+        .from('coupons')
+        .select('*')
+        .eq('code', code.toUpperCase().trim())
+        .eq('active', true)
+        .maybeSingle();
+
+      if (error || !coupon) {
+        return { success: false, message: 'Invalid or expired coupon code' };
+      }
+
+      const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+      if (subtotal < Number(coupon.min_order_amount)) {
+        return { 
+          success: false, 
+          message: `Minimum order amount of ₹${coupon.min_order_amount} required for this coupon` 
+        };
+      }
+
+      setActiveCoupon(coupon);
+      sessionStorage.setItem('shopnow_active_coupon', JSON.stringify(coupon));
+      return { success: true, message: `Coupon ${coupon.code} applied successfully!` };
+    } catch (err) {
+      console.error("Error applying coupon", err);
+      return { success: false, message: 'Error applying coupon' };
+    }
+  };
+
+  const removeCoupon = () => {
+    setActiveCoupon(null);
+    sessionStorage.removeItem('shopnow_active_coupon');
+  };
+
+  const updateUserPreferences = async (prefs: any) => {
+    const merged = { ...userPreferences, ...prefs };
+    setUserPreferences(merged);
+    
+    if (user) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({ preferences: merged })
+          .eq('id', user.id);
+      } catch (e) {
+        console.error("Failed to sync user preferences to DB", e);
+      }
+    } else {
+      sessionStorage.setItem('shopnow_user_preferences', JSON.stringify(merged));
     }
   };
 
@@ -342,7 +462,12 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
         removeFromWishlist,
         refreshCart,
         refreshWishlist,
-        logout
+        logout,
+        activeCoupon,
+        applyCoupon,
+        removeCoupon,
+        userPreferences,
+        updateUserPreferences
       }}
     >
       {children}

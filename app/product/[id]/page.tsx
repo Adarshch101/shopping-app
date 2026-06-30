@@ -3,7 +3,6 @@
 import React, { use, useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import { ArrowLeft, Star, Heart, ShoppingBag, Truck, ShieldAlert, RotateCcw } from 'lucide-react';
 import { useApp } from '@/components/providers/app-context';
 import { Product } from '@/lib/products-data';
@@ -15,7 +14,6 @@ export default function ProductDetailsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const router = useRouter();
   const { wishlist, cart, addToCart, updateCartQuantity, addToWishlist, removeFromWishlist } = useApp();
 
   const [product, setProduct] = useState<Product | null>(null);
@@ -89,7 +87,6 @@ export default function ProductDetailsPage({
   }
 
   const isWishlisted = wishlist.some(item => item.id === product.id);
-  const isInCart = cart.some(item => item.product.id === product.id);
 
   const handleWishlistToggle = async () => {
     if (isWishlisted) {
