@@ -94,12 +94,18 @@ export default function Header() {
             {/* User Auth */}
             {user ? (
               <div className="flex items-center gap-3 pl-2 border-l border-zinc-100 dark:border-zinc-800">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-sm font-semibold text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
-                  {user.email?.charAt(0).toUpperCase()}
-                </div>
-                <span className="text-xs text-zinc-500 max-w-[120px] truncate hidden lg:inline-block">
-                  {user.email}
-                </span>
+                <Link
+                  href="/profile"
+                  className="flex items-center gap-2 group cursor-pointer hover:opacity-80 transition-opacity"
+                  title="View Profile"
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-sm font-semibold text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
+                    {user.email?.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-xs text-zinc-500 max-w-[120px] truncate hidden lg:inline-block">
+                    {user.email}
+                  </span>
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 hover:text-zinc-950 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:text-zinc-50 dark:hover:bg-zinc-900 transition-colors"
@@ -174,15 +180,19 @@ export default function Header() {
 
             {user ? (
               <div className="flex flex-col gap-4 pt-4 mt-4 border-t border-zinc-100 dark:border-zinc-800">
-                <div className="flex items-center gap-3">
+                <Link
+                  href="/profile"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 p-2 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
+                >
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-sm font-semibold text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
                     {user.email?.charAt(0).toUpperCase()}
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Logged in</span>
+                  <div className="flex flex-col text-left">
+                    <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">View Profile</span>
                     <span className="text-xs text-zinc-500">{user.email}</span>
                   </div>
-                </div>
+                </Link>
                 <Button
                   variant="outline"
                   onClick={() => {

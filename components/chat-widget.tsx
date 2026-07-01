@@ -65,7 +65,14 @@ export default function ChatWidget() {
       try {
         const history = JSON.parse(storedHistory);
         if (history && history.length > 0) {
-          const mapped = history.map((m: any) => ({
+          interface SerializedMessage {
+            id: string;
+            sender: 'user' | 'bot';
+            text: string;
+            products?: Product[];
+            timestamp: string;
+          }
+          const mapped = (history as SerializedMessage[]).map((m) => ({
             ...m,
             timestamp: new Date(m.timestamp)
           }));
@@ -206,16 +213,15 @@ export default function ChatWidget() {
             if (metadataStr) {
               try {
                 const metadata = JSON.parse(metadataStr);
-                setMessages(prev => prev.map(m => m.id === botMsgId ? { 
-                  ...m, 
-                  products: (metadata.products || []).slice(0, 5),
+                const parsedProducts = Array.isArray(metadata.products) ? metadata.products.slice(0, 5) : [];
+                setMessages(prev => prev.map(m => m.id === botMsgId ? {
+                  ...m,
+                  products: parsedProducts,
                   text: visibleText
                 } : m));
-                setSuggestions(metadata.suggestions || []);
+                setSuggestions(Array.isArray(metadata.suggestions) ? metadata.suggestions : []);
 
-                if (metadata.action === 'refresh_cart') {
-                  refreshCart();
-                } else if (metadata.action === 'apply_coupon' && metadata.couponCode) {
+                if (metadata.action === 'apply_coupon' && metadata.couponCode) {
                   applyCoupon(metadata.couponCode);
                 }
 
@@ -412,7 +418,7 @@ export default function ChatWidget() {
                 </div>
 
                 {/* Inline Product Cards */}
-                {msg.products && msg.products.length > 0 && (
+                {Array.isArray(msg.products) && msg.products.length > 0 && (
                   <div className="w-full pl-2">
                     <div className="flex gap-3 overflow-x-auto pb-3 pt-1 scrollbar-none snap-x">
                       {msg.products.map((product) => (

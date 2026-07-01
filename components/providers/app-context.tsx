@@ -10,8 +10,16 @@ interface CartItem {
   quantity: number;
 }
 
+interface Coupon {
+  code: string;
+  discount_percent: number;
+  discount_amount: number;
+  min_order_amount: number;
+  description: string;
+}
+
 interface AppContextType {
-  user: any | null;
+  user: { id: string; email: string } | null;
   isLoading: boolean;
   cart: CartItem[];
   wishlist: Product[];
@@ -26,24 +34,24 @@ interface AppContextType {
   refreshCart: () => Promise<void>;
   refreshWishlist: () => Promise<void>;
   logout: () => Promise<void>;
-  activeCoupon: any | null;
+  activeCoupon: Coupon | null;
   applyCoupon: (code: string) => Promise<{ success: boolean; message: string }>;
   removeCoupon: () => void;
-  userPreferences: any;
-  updateUserPreferences: (prefs: any) => Promise<void>;
+  userPreferences: Record<string, string>;
+  updateUserPreferences: (prefs: Record<string, string>) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppContextProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any | null>(null);
+  const [user, setUser] = useState<{ id: string; email: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<Product[]>([]);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [productsList, setProductsList] = useState<Product[]>([]);
-  const [activeCoupon, setActiveCoupon] = useState<any | null>(null);
-  const [userPreferences, setUserPreferences] = useState<any>({});
+  const [activeCoupon, setActiveCoupon] = useState<Coupon | null>(null);
+  const [userPreferences, setUserPreferences] = useState<Record<string, string>>({});
 
   // Load products list locally to resolve anonymous wishlist product IDs
   useEffect(() => {
@@ -137,13 +145,13 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+      setUser(session?.user ? { id: session.user.id, email: session.user.email || '' } : null);
       setIsLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const activeUser = session?.user ?? null;
-      setUser(activeUser);
+      setUser(activeUser ? { id: activeUser.id, email: activeUser.email || '' } : null);
       setIsLoading(false);
 
       if (activeUser) {
@@ -423,7 +431,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     sessionStorage.removeItem('shopnow_active_coupon');
   };
 
-  const updateUserPreferences = async (prefs: any) => {
+  const updateUserPreferences = async (prefs: Record<string, string>) => {
     const merged = { ...userPreferences, ...prefs };
     setUserPreferences(merged);
     

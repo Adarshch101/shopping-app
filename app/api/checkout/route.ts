@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
-import { mapProduct } from '@/lib/products-mapper';
+import { mapProduct, type SupabaseProduct } from '@/lib/products-mapper';
 import { CartItem } from '@/lib/products-data';
 
 // Helper to retrieve mapped cart items
@@ -14,18 +14,17 @@ async function getCartItems(userId: string): Promise<CartItem[]> {
     throw error;
   }
   
-  return (data || [])
-    .map((item: any) => {
-      const product = mapProduct(item.products);
-      if (!product) return null;
-      return {
-        id: item.id,
-        product,
-        quantity: item.quantity,
-        created_at: item.created_at
-      };
-    })
-    .filter((item): item is CartItem => item !== null);
+  return (data || []).map((d) => {
+    const item = d as unknown as { id: string; quantity: number; created_at: string; products: SupabaseProduct | null };
+    const product = mapProduct(item.products);
+    if (!product) return null;
+    return {
+      id: item.id,
+      product,
+      quantity: item.quantity,
+      created_at: item.created_at
+    };
+  }).filter((item): item is CartItem => item !== null);
 }
 
 export async function POST(request: NextRequest) {

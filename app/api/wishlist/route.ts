@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
-import { mapProduct } from '@/lib/products-mapper';
+import { mapProduct, type SupabaseProduct } from '@/lib/products-mapper';
 import { Product } from '@/lib/products-data';
 
 // Helper to retrieve mapped wishlist products
@@ -15,7 +15,10 @@ async function getWishlistItems(userId: string): Promise<Product[]> {
   }
   
   return (data || [])
-    .map((item: any) => mapProduct(item.products))
+    .map((d) => {
+      const item = d as unknown as { products: SupabaseProduct | null };
+      return mapProduct(item.products);
+    })
     .filter((p): p is Product => p !== null);
 }
 

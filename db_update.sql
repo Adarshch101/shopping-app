@@ -69,3 +69,32 @@ insert into public.coupons (code, discount_percent, discount_amount, min_order_a
 ('WELCOME50', 0.00, 50.00, 300.00, '₹50 off on orders above ₹300', true),
 ('FREESHIP', 0.00, 99.00, 500.00, 'Free shipping (₹99 off) on orders above ₹500', true)
 on conflict (code) do nothing;
+
+-- 6. Create storage bucket for user documents (PDF/DOCX)
+insert into storage.buckets (id, name, public)
+values ('user-documents', 'user-documents', false)
+on conflict (id) do nothing;
+
+-- Enable RLS for storage.objects
+alter table storage.objects enable row level security;
+
+-- Storage Policy: Allow users to view their own uploaded files
+create policy "Allow users to view their own files" on storage.objects
+  for select using (
+    bucket_id = 'user-documents' 
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+-- Storage Policy: Allow users to upload files to their own folder
+create policy "Allow users to upload their own files" on storage.objects
+  for insert with check (
+    bucket_id = 'user-documents' 
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+-- Storage Policy: Allow users to delete their own files
+create policy "Allow users to delete their own files" on storage.objects
+  for delete using (
+    bucket_id = 'user-documents' 
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );

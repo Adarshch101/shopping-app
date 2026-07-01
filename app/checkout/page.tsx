@@ -23,9 +23,27 @@ export default function CheckoutPage() {
   const [couponError, setCouponError] = useState('');
   const [couponSuccess, setCouponSuccess] = useState('');
 
+  interface SuccessOrder {
+    id: string;
+    total_amount: number;
+    shipping_address: {
+      fullName: string;
+      addressLine1: string;
+      city: string;
+      postalCode: string;
+      phone: string;
+    };
+    items: {
+      id?: string;
+      name: string;
+      quantity: number;
+      price: number;
+    }[];
+  }
+
   // Submit states
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [orderSuccess, setOrderSuccess] = useState<any | null>(null);
+  const [orderSuccess, setOrderSuccess] = useState<SuccessOrder | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
   const handleApplyPromo = async () => {
@@ -201,7 +219,7 @@ export default function CheckoutPage() {
               Items Ordered
             </h3>
             <div className="space-y-3">
-              {orderSuccess.items.map((item: any, idx: number) => (
+              {orderSuccess.items.map((item, idx: number) => (
                 <div key={idx} className="flex justify-between items-center text-sm">
                   <span className="text-zinc-600 dark:text-zinc-400 line-clamp-1 flex-1 pr-4">
                     {item.name} <span className="text-xs text-zinc-400">x{item.quantity}</span>

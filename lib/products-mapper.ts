@@ -1,6 +1,20 @@
 import { Product } from './products-data';
 
-export function mapProduct(p: any): Product | null {
+export interface SupabaseProduct {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  image: string;
+  rating_rate?: number;
+  rating_count?: number;
+  features?: string[];
+  specs?: Record<string, string> | null;
+  stock?: number;
+}
+
+export function mapProduct(p: SupabaseProduct | null | undefined): Product | null {
   if (!p) return null;
   // Convert USD to INR (e.g. 1 USD = 83 INR)
   const convertedPrice = Math.round(Number(p.price) * 83);
@@ -9,7 +23,7 @@ export function mapProduct(p: any): Product | null {
     name: p.name,
     description: p.description,
     price: convertedPrice,
-    category: p.category,
+    category: p.category as Product['category'],
     image: p.image,
     rating: {
       rate: Number(p.rating_rate),
